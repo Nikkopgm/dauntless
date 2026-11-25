@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<title>Écho des Colosses</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="touch"></div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="stats">
+    <div id="lvl">1</div>
+    <div class="bars">
+      <div class="bar hp"><i id="hpF"></i><span id="hpT"></span></div>
+      <div class="bar st"><i id="stF"></i></div>
+      <div class="bar xp"><i id="xpF"></i></div>
+    </div>
+  </div>
+  <div id="topBtns">
+    <button id="bLog" class="small">📜</button>
+  </div>
+  <div id="mapWrap"><canvas id="map" width="140" height="140"></canvas><div id="gold">0 🪙</div><div id="zoneName"></div></div>
+  <div id="tracker"></div>
+  <div id="boss" class="hidden"><div id="bossName"></div><div class="bar boss"><i id="bossF"></i></div></div>
+
+  <div id="joy"><div id="knob"></div></div>
+
+  <div id="actions">
+    <button id="bInteract" class="act hidden">Parler</button>
+    <button id="bPotion" class="act round sm">🧪<b id="potN">3</b></button>
+    <button id="bSkill" class="act round md">💥<i id="skCd"></i></button>
+    <button id="bDodge" class="act round md">💨</button>
+    <button id="bAtk" class="act round lg">⚔️</button>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="dmg"></div>
+
+<!-- Dialogue -->
+<div id="dialog" class="panel hidden">
+  <h2 id="dlgName"></h2>
+  <h3 id="dlgTitle"></h3>
+  <p id="dlgText"></p>
+  <div id="dlgRew"></div>
+  <div id="dlgBtns"></div>
+</div>
+
+<!-- Journal -->
+<div id="log" class="panel hidden">
+  <h2>Journal de quêtes</h2>
+  <div id="logList"></div>
+  <div class="row"><button id="bLogClose">Fermer</button><button id="bReset" class="ghost">Nouvelle partie</button></div>
+</div>
+
+<!-- Écran titre -->
+<div id="title">
+  <h1>Écho des<br>Colosses</h1>
+  <p>Chassez les colosses des Terres Sauvages.<br>Explorez, aidez le village de Brumeval, devenez légende.</p>
+  <button id="bPlay">Jouer</button>
+  <p class="help">Mobile : joystick à gauche, glisser à droite pour la caméra.<br>Clavier : ZQSD/WASD, J attaque, Espace esquive, K compétence, R potion, E interagir.</p>
+</div>
+
+<div id="dead" class="hidden"><h1>Vous êtes tombé…</h1><p>Retour au village.</p></div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
