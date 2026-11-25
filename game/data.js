@@ -6,14 +6,14 @@
 export const CLASSES = {
   guerrier: {
     name: 'Guerrier', icon: '🪓', role: 'Corps à corps · Robuste',
-    desc: 'Colosse en armure de plaques, armé d\'une hache à deux mains. Encaisse les coups et frappe très fort.',
+    desc: 'Barbare au casque à cornes, armé d\'une hache à deux mains. Encaisse les coups et frappe très fort.',
     hp: 140, hpLvl: 20, dmg: 1.1, kind: 'melee', reach: 3.9, swing: 0.42, crit: 0.12, dodgeCost: 25,
     skill: { name: 'Tourbillon', icon: '🌀', cd: 7, type: 'whirl', mult: 2.4, radius: 6.5, desc: 'Tournoie et frappe tout autour de lui.' },
     stats: { Vie: 5, Dégâts: 4, Portée: 1, Soins: 1 },
   },
   paladin: {
     name: 'Paladin', icon: '🛡️', role: 'Corps à corps · Soins',
-    desc: 'Champion de la lumière, masse et bouclier en main. Chacun de ses coups le soigne un peu.',
+    desc: 'Chevalier de la lumière, épée et bouclier en main. Chacun de ses coups le soigne un peu.',
     hp: 130, hpLvl: 18, dmg: 0.95, kind: 'melee', reach: 3.5, swing: 0.4, crit: 0.1, lifesteal: 0.15, dodgeCost: 25,
     skill: { name: 'Lumière sacrée', icon: '✨', cd: 10, type: 'holy', mult: 1.8, radius: 7, heal: 0.35, desc: 'Explosion de lumière : soigne 35 % et blesse les ennemis proches.' },
     stats: { Vie: 4, Dégâts: 3, Portée: 1, Soins: 5 },
@@ -27,7 +27,7 @@ export const CLASSES = {
   },
   chasseur: {
     name: 'Chasseur', icon: '🏹', role: 'Distance · Polyvalent',
-    desc: 'Archer des terres sauvages. Tire des flèches à longue portée et garde les monstres à distance.',
+    desc: 'Pisteur encapuchonné armé d\'une arbalète. Tire des carreaux à longue portée et garde les monstres à distance.',
     hp: 110, hpLvl: 15, dmg: 0.85, kind: 'ranged', range: 24, proj: 'arrow', swing: 0.42, crit: 0.15, dodgeCost: 20,
     skill: { name: 'Pluie de flèches', icon: '🎯', cd: 8, type: 'rain', mult: 2.3, radius: 6, desc: 'Une volée de flèches s\'abat sur la zone ciblée.' },
     stats: { Vie: 3, Dégâts: 3, Portée: 5, Soins: 1 },
@@ -44,7 +44,7 @@ export const CLASSES = {
 export const ZONES = {
   village: { name: 'Brumeval', hint: 'Un refuge sûr' },
   plains: { name: 'Prés d\'Or', hint: 'Niveau 1-3' },
-  forest: { name: 'Sylve Noire', hint: 'Niveau 3-6' },
+  forest: { name: 'Sylve Givrée', hint: 'Niveau 3-6' },
   marsh: { name: 'Marais Brumeux', hint: 'Niveau 5-8' },
   volcanic: { name: 'Crêtes de Braise', hint: 'Niveau 7-10' },
 };
@@ -57,8 +57,8 @@ export const MONSTERS = {
     attacks: [{ type: 'bite', range: 1.5, windup: 0.7, dmg: 7 }],
   },
   loup: {
-    name: 'Loup de cendre', lvl: 3, hp: 80, speed: 7, size: 1.1, xp: 45, gold: 5, aggro: 16, leash: 40,
-    color: 0x5a5a62, color2: 0x2a2a30, eye: 0xff5a2a, tail: true, fur: true,
+    name: 'Loup de givre', lvl: 3, hp: 80, speed: 7, size: 1.1, xp: 45, gold: 5, aggro: 16, leash: 40,
+    color: 0xc8d4e8, color2: 0x5a6a8a, eye: 0x5ad8ff, tail: true, fur: true,
     attacks: [
       { type: 'bite', range: 1.5, windup: 0.55, dmg: 11 },
       { type: 'leap', radius: 2.2, windup: 0.9, dmg: 14, minRange: 5, maxRange: 11 },
@@ -141,7 +141,7 @@ export const QUESTS = [
   },
   {
     id: 'q3', giver: 'lysa', turnin: 'lysa', title: 'Fleurs de lune', req: ['q1'], minLvl: 2,
-    text: 'Les fleurs de lune poussent dans la Sylve Noire, au nord. Rapporte-m\'en cinq pour mes potions. Attention aux loups.',
+    text: 'Les fleurs de lune poussent dans la Sylve Givrée, au nord. Rapporte-m\'en cinq pour mes potions. Attention aux loups.',
     done: 'Parfaites ! Tiens, quelques potions pour la route.',
     obj: [{ t: 'collect', id: 'fleur', n: 5 }], rew: { xp: 200, potions: 2, gold: 20 },
   },
@@ -152,8 +152,8 @@ export const QUESTS = [
     obj: [], rew: { xp: 80 },
   },
   {
-    id: 'q5', giver: 'tavin', turnin: 'tavin', title: 'La meute de cendre', req: ['q4'],
-    text: 'Les loups de cendre sont devenus fous. Quelque chose les pousse hors de la forêt. Abats-en cinq.',
+    id: 'q5', giver: 'tavin', turnin: 'tavin', title: 'La meute de givre', req: ['q4'],
+    text: 'Les loups de givre sont devenus fous. Quelque chose les pousse hors de la forêt. Abats-en cinq.',
     done: 'Ils fuyaient… quelque chose de bien plus gros.',
     obj: [{ t: 'kill', id: 'loup', n: 5 }], rew: { xp: 280, gold: 40 },
   },

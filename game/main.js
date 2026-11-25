@@ -2,6 +2,8 @@ import * as THREE from './lib/three.module.min.js';
 import { MONSTERS, SPAWNS, NPCS, QUESTS, ITEMS, ZONES, CLASSES } from './data.js';
 import { TEX, rep } from './textures.js';
 import { makeHero } from './heroes.js';
+import { loadHero } from './models.js';
+import { mergeGeometries } from './lib/utils/BufferGeometryUtils.js';
 
 // ====================================================================
 // Utilitaires
@@ -78,17 +80,18 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
-const SKY = new THREE.Color(0xc4dcec);
+const SKY = new THREE.Color(0xeab9bd); // horizon rosé
 scene.background = SKY.clone();
-scene.fog = new THREE.Fog(SKY.clone(), 70, 230);
+scene.fog = new THREE.Fog(SKY.clone(), 60, 240);
 // Ciel en dégradé (sphère qui suit la caméra)
 const sky = new THREE.Mesh(new THREE.SphereGeometry(450, 24, 12), new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { top: { value: new THREE.Color(0x2f6fc0) }, bot: { value: SKY.clone() }, sunDir: { value: new THREE.Vector3(0.4, 0.75, 0.25).normalize() } },
+  uniforms: { top: { value: new THREE.Color(0x34408f) }, mid: { value: new THREE.Color(0x9a86c8) }, bot: { value: SKY.clone() }, sunDir: { value: new THREE.Vector3(0.75, 0.12, 0.3).normalize() } },
   vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform vec3 top; uniform vec3 bot; uniform vec3 sunDir; varying vec3 vP;
-    void main(){ float h = clamp(vP.y * 1.8 + 0.05, 0.0, 1.0); vec3 c = mix(bot, top, h);
-      float s = max(dot(vP, sunDir), 0.0); c += vec3(1.0, 0.85, 0.6) * (pow(s, 400.0) * 3.0 + pow(s, 12.0) * 0.25);
+  fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bot; uniform vec3 sunDir; varying vec3 vP;
+    void main(){ float h = clamp(vP.y * 1.6 + 0.04, 0.0, 1.0);
+      vec3 c = h < 0.35 ? mix(bot, mid, h / 0.35) : mix(mid, top, (h - 0.35) / 0.65);
+      float s = max(dot(vP, sunDir), 0.0); c += vec3(1.0, 0.7, 0.45) * (pow(s, 300.0) * 3.0 + pow(s, 8.0) * 0.35);
       gl_FragColor = vec4(c, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -106,10 +109,10 @@ scene.add(sky);
   scene.environment = pm.fromScene(envScene, 0.02).texture;
   pm.dispose();
 }
-const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 600);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 900);
 
-scene.add(new THREE.HemisphereLight(0xdff0ff, 0x5a4a30, 1.1));
-const sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
+scene.add(new THREE.HemisphereLight(0xc8c0ff, 0x6a4a50, 1.25));
+const sun = new THREE.DirectionalLight(0xffd6b0, 2.4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 });
@@ -129,7 +132,7 @@ resize();
 // --- Terrain
 const ZCOL = {
   village: new THREE.Color(0.58, 0.5, 0.34), plains: new THREE.Color(0.42, 0.64, 0.28),
-  forest: new THREE.Color(0.2, 0.42, 0.18), marsh: new THREE.Color(0.33, 0.4, 0.24),
+  forest: new THREE.Color(0.86, 0.9, 0.98), marsh: new THREE.Color(0.3, 0.42, 0.3),
   volcanic: new THREE.Color(0.32, 0.22, 0.19),
 };
 {
@@ -151,7 +154,9 @@ const ZCOL = {
     const n = fbm(x * 0.15, z * 0.15) * 0.25 + 0.85;
     c.multiplyScalar(n * 1.15);
     if (h < WATER + 0.6) c.lerp(new THREE.Color(0.55, 0.5, 0.36), 0.6);
-    if (h > 18) c.lerp(new THREE.Color(0.45, 0.42, 0.4), smooth(18, 35, h));
+    if (h > 18) c.lerp(new THREE.Color(0.45, 0.42, 0.48), smooth(18, 30, h));
+    if (h > 30) c.lerp(new THREE.Color(0.92, 0.94, 1.0), smooth(30, 42, h)); // neige des sommets
+    if (w.forest > 0.4) c.lerp(new THREE.Color(0.62, 0.7, 0.9), (fbm(x * 0.05, z * 0.05) - 0.4) * 0.8 * w.forest); // ombres bleutées
     if (w.volcanic > 0.5 && fbm(x * 0.08, z * 0.08) > 0.68) c.lerp(new THREE.Color(0.9, 0.35, 0.1), 0.6);
     cols.push(c.r, c.g, c.b);
   }
@@ -165,6 +170,7 @@ const ZCOL = {
     new THREE.MeshStandardMaterial({ color: 0x2f6f84, transparent: true, opacity: 0.8, roughness: 0.08, metalness: 0.3 }));
   water.rotation.x = -Math.PI / 2;
   water.position.y = WATER;
+  water.material.color.setHex(0x3a8aa8);
   scene.add(water);
 }
 
@@ -212,8 +218,14 @@ function pushOut(p, radius) {
     if (zn === 'volcanic' || Math.random() < 0.35) rocks.push([x, heightAt(x, z), z]);
   }
 
-  const trunkG = new THREE.CylinderGeometry(0.25, 0.4, 3, 6); trunkG.translate(0, 1.5, 0);
-  const pineG = new THREE.ConeGeometry(2, 6, 7); pineG.translate(0, 5.5, 0);
+  const trunkG = new THREE.CylinderGeometry(0.22, 0.38, 4, 6); trunkG.translate(0, 2, 0);
+  const layers = (k, dy) => mergeGeometries([
+    new THREE.ConeGeometry(2.3 * k, 3.4, 8).translate(0, 3.6 + dy, 0),
+    new THREE.ConeGeometry(1.75 * k, 3.0, 8).translate(0, 5.5 + dy, 0),
+    new THREE.ConeGeometry(1.15 * k, 2.6, 8).translate(0, 7.3 + dy, 0),
+  ].map((g) => g.toNonIndexed()));
+  const pineG = layers(1, 0);
+  const snowG = layers(0.78, 0.45);
   const roundG = new THREE.IcosahedronGeometry(2.4, 0); roundG.translate(0, 4.2, 0);
   const deadG = new THREE.CylinderGeometry(0.15, 0.35, 5, 5); deadG.translate(0, 2.5, 0);
   const rockG = new THREE.DodecahedronGeometry(1.4, 0);
@@ -243,7 +255,9 @@ function pushOut(p, radius) {
   let si = 0;
   inst(trunkG, trunkM, allTrees, null, () => scales[si++], 0.6);
   si = 0;
-  inst(pineG, leafM, pines, (c) => c.setHSL(rand(0.28, 0.36), 0.5, rand(0.18, 0.28)), () => scales[si++]);
+  inst(pineG, leafM, pines, (c) => c.setHSL(rand(0.44, 0.52), 0.42, rand(0.16, 0.24)), () => scales[si++]);
+  si = 0;
+  inst(snowG, new THREE.MeshLambertMaterial({ color: 0xf4f6ff }), pines, null, () => scales[si++]);
   inst(roundG, leafM, rounds, (c) => c.setHSL(rand(0.22, 0.3), 0.55, rand(0.3, 0.42)), () => scales[si++]);
   inst(deadG, deadM, deads, null, null, 0.4);
   inst(rockG, rockM, rocks, (c) => c.setHSL(0.08, 0.05, rand(0.8, 1.0)), () => rand(0.6, 2.2), 1.3);
@@ -270,7 +284,7 @@ function pushOut(p, radius) {
     const x = rand(-WORLD + 15, WORLD - 15), z = rand(-WORLD + 15, WORLD - 15), h = heightAt(x, z), d = Math.hypot(x, z);
     if (h < WATER + 0.4 || d < 16) continue;
     const zn = zoneAt(x, z);
-    if (zn === 'volcanic' || (zn === 'village' && Math.random() < 0.6)) continue;
+    if (zn === 'volcanic' || zn === 'forest' || (zn === 'village' && Math.random() < 0.6)) continue;
     dm.position.set(x, h - 0.05, z); dm.rotation.set(0, rand(0, 3), 0); dm.scale.setScalar(rand(0.7, 1.4)); dm.updateMatrix();
     m.setMatrixAt(n, dm.matrix);
     col.copy(ZCOL[zn === 'village' ? 'plains' : zn]).multiplyScalar(rand(0.45, 0.65));
@@ -279,6 +293,106 @@ function pushOut(p, radius) {
   }
   m.count = n;
   scene.add(m);
+}
+
+// --- Fleurs (taches roses, rouges, violettes et jaunes)
+{
+  const geo = new THREE.IcosahedronGeometry(0.22, 0).translate(0, 0.3, 0);
+  const N = 2600, m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ emissive: 0x220a18 }), N);
+  const dm = new THREE.Object3D(), col = new THREE.Color(), palette = [0xff5a8a, 0xe0304a, 0xb06aff, 0xffd84a, 0xff8ad0];
+  let n = 0;
+  for (let i = 0; i < 400 && n < N; i++) {
+    // Les fleurs poussent en massifs
+    const cx = rand(-WORLD + 20, WORLD - 20), cz = rand(-WORLD + 20, WORLD - 20), zn = zoneAt(cx, cz);
+    if (!(zn === 'plains' || zn === 'marsh' || zn === 'forest')) continue;
+    const hex = palette[Math.floor(Math.random() * palette.length)];
+    for (let j = 0; j < 9 && n < N; j++) {
+      const x = cx + rand(-4, 4), z = cz + rand(-4, 4), h = heightAt(x, z);
+      if (h < WATER + 0.3) continue;
+      dm.position.set(x, h, z); dm.scale.setScalar(rand(0.7, 1.5)); dm.updateMatrix();
+      m.setMatrixAt(n, dm.matrix); m.setColorAt(n, col.setHex(hex)); n++;
+    }
+  }
+  m.count = n;
+  scene.add(m);
+}
+
+// --- Grandes formations rocheuses
+{
+  const geo = new THREE.CylinderGeometry(3.5, 6, 18, 7, 3);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setXYZ(i, pos.getX(i) * rand(0.85, 1.15), pos.getY(i), pos.getZ(i) * rand(0.85, 1.15));
+  geo.computeVertexNormals();
+  const m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, map: rep(TEX.stone, 5, 7) }), 40);
+  m.castShadow = m.receiveShadow = true;
+  const dm = new THREE.Object3D(), col = new THREE.Color();
+  let n = 0;
+  for (let i = 0; i < 600 && n < 40; i++) {
+    const x = rand(-WORLD + 30, WORLD - 30), z = rand(-WORLD + 30, WORLD - 30);
+    if (Math.hypot(x, z) < 70 || (Math.abs(x) < 12 && z < -30 && z > -120)) continue;
+    if (SPAWNS.some((sp) => sp.at && Math.hypot(x - sp.at[0], z - sp.at[1]) < 40)) continue;
+    const h = heightAt(x, z);
+    if (h < WATER + 0.5) continue;
+    const s = rand(0.7, 1.6);
+    dm.position.set(x, h + 6 * s, z); dm.rotation.set(rand(-0.08, 0.08), rand(0, 6), rand(-0.08, 0.08)); dm.scale.set(s, s * rand(0.8, 1.5), s); dm.updateMatrix();
+    m.setMatrixAt(n, dm.matrix);
+    const zn = zoneAt(x, z);
+    m.setColorAt(n, col.setHex(zn === 'volcanic' ? 0xb08a8a : zn === 'forest' ? 0xe0e0ff : 0xf0d8cc));
+    addCollider(x, z, 5.5 * s);
+    n++;
+  }
+  m.count = n;
+  scene.add(m);
+}
+
+// --- Îles flottantes à l'horizon (non affectées par le brouillard)
+{
+  const tint = new THREE.Color(0xb8a0d0);
+  const rockM = new THREE.MeshLambertMaterial({ color: new THREE.Color(0x8a7a90).lerp(tint, 0.35), map: rep(TEX.stone, 2), fog: false });
+  const grassM = new THREE.MeshLambertMaterial({ color: new THREE.Color(0x6aa070).lerp(tint, 0.35), fog: false });
+  const pineM = new THREE.MeshLambertMaterial({ color: new THREE.Color(0x2a5a5a).lerp(tint, 0.3), fog: false });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + rand(-0.2, 0.2), r = rand(430, 560), s = rand(14, 34);
+    const g = new THREE.Group();
+    const under = new THREE.Mesh(new THREE.ConeGeometry(1, 2.4, 7, 2), rockM); under.rotation.x = Math.PI; under.position.y = -1.2;
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1, 0.25, 7), grassM);
+    g.add(under, top);
+    for (let k = 0; k < 4; k++) {
+      const t = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.35, 6), pineM);
+      t.position.set(rand(-0.6, 0.6), 0.3, rand(-0.6, 0.6)); g.add(t);
+    }
+    g.scale.setScalar(s);
+    g.position.set(Math.cos(a) * r, rand(60, 150), Math.sin(a) * r);
+    g.rotation.y = rand(0, 6);
+    scene.add(g);
+  }
+}
+
+// --- Neige qui tombe dans la Sylve Givrée
+const snow = (() => {
+  const N = 1200, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { pos[i * 3] = rand(-35, 35); pos[i * 3 + 1] = rand(0, 30); pos[i * 3 + 2] = rand(-35, 35); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.22, transparent: true, opacity: 0, depthWrite: false }));
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return pts;
+})();
+function updateSnow(dt) {
+  const w = zoneWeights(player.pos.x, player.pos.z).forest;
+  const target = w > 0.35 ? 0.85 : 0;
+  snow.material.opacity += (target - snow.material.opacity) * Math.min(1, dt * 2);
+  snow.visible = snow.material.opacity > 0.02;
+  if (!snow.visible) return;
+  snow.position.set(player.pos.x, player.pos.y - 5, player.pos.z);
+  const p = snow.geometry.attributes.position, t = clock.elapsedTime;
+  for (let i = 0; i < p.count; i++) {
+    let y = p.getY(i) - dt * 2.2;
+    if (y < 0) y += 30;
+    p.setY(i, y);
+    p.setX(i, p.getX(i) + Math.sin(t + i) * dt * 0.4);
+  }
+  p.needsUpdate = true;
 }
 
 // --- Village & avant-poste
@@ -330,11 +444,19 @@ campfire(6, 6); campfire(-4, -108);
 // ====================================================================
 let hunter = makeHero('guerrier');
 scene.add(hunter.g);
-function setHeroModel(id) {
+// Le modèle simple s'affiche tout de suite, puis il est remplacé par le personnage animé dès qu'il est chargé
+let heroToken = 0;
+function swapHero(h) {
   scene.remove(hunter.g);
-  hunter = makeHero(id);
+  hunter = h;
   hunter.g.position.copy(player.pos);
+  hunter.g.rotation.y = player.rot;
   scene.add(hunter.g);
+}
+function setHeroModel(id) {
+  const token = ++heroToken;
+  swapHero(makeHero(id));
+  loadHero(id).then((h) => { if (token === heroToken) swapHero(h); }).catch((e) => console.warn('Modèle 3D indisponible', e));
 }
 
 const player = {
@@ -781,6 +903,10 @@ function startSwing() {
   player.atk = player.combo; player.atkT = 0; player.hitDone = false; player.queued = false;
   const t = nearestMonster(CLS().kind === 'ranged' ? CLS().range : 7);
   if (t) player.rot = Math.atan2(t.pos.x - player.pos.x, t.pos.z - player.pos.z);
+  if (hunter.anim) {
+    const list = hunter.cfg.atk;
+    hunter.play(list[(player.combo - 1) % list.length], { once: true, dur: CLS().swing * (player.combo === 3 ? 1.4 : 1) * 1.1 });
+  }
 }
 function dodge() {
   const cost = CLS().dodgeCost;
@@ -791,14 +917,17 @@ function dodge() {
   const kx = (input.keys.KeyD || input.keys.ArrowRight ? 1 : 0) - (input.keys.KeyA || input.keys.KeyQ || input.keys.ArrowLeft ? 1 : 0);
   const kz = (input.keys.KeyS || input.keys.ArrowDown ? 1 : 0) - (input.keys.KeyW || input.keys.KeyZ || input.keys.ArrowUp ? 1 : 0);
   dx += kx; dz += kz;
-  if (Math.hypot(dx, dz) < 0.1) player.dodgeDir.set(Math.sin(player.rot), 0, Math.cos(player.rot)).multiplyScalar(-1);
+  if (Math.hypot(dx, dz) < 0.1) player.dodgeDir.set(Math.sin(player.rot), 0, Math.cos(player.rot));
   else player.dodgeDir.copy(moveDir(dx, dz));
+  player.rot = Math.atan2(player.dodgeDir.x, player.dodgeDir.z);
   player.dodgeT = 0.35;
+  if (hunter.anim) hunter.play('Dodge_Forward', { once: true, dur: 0.45 });
 }
 function skill() {
   if (player.dead || player.skillCd > 0 || player.dodgeT > 0) return;
   const S = CLS().skill;
   player.skillCd = S.cd; player.skillT = 0.6; player.atk = 0; player.hitDone = false;
+  if (hunter.anim) hunter.play(hunter.cfg.skill, { once: true, dur: 0.7 });
   if (S.type === 'shadow') shadowStep(S);
 }
 function potion() {
@@ -866,11 +995,13 @@ function hurtPlayer(dmg, from) {
 }
 function die() {
   player.dead = true; player.hp = 0;
+  if (hunter.anim) hunter.play('Death_A', { once: true });
   $('dead').classList.remove('hidden');
   for (const m of monsters) { clearTele(m); if (!m.dead) { m.state = 'return'; m.hp = m.maxHp; m.enraged = false; } }
   setTimeout(() => {
     player.gold = Math.floor(player.gold * 0.9);
     player.pos.set(0, 0, 8); player.hp = player.maxHp; player.st = 100; player.dead = false;
+    if (hunter.anim) hunter.play(hunter.cfg.idle, { once: false });
     player.potions = Math.max(player.potions, 1); updatePotions();
     $('dead').classList.add('hidden');
     save();
@@ -1134,6 +1265,13 @@ function updatePlayer(dt) {
   const g = hunter.g;
   g.position.copy(p.pos);
   g.rotation.y = p.rot;
+  const glowHex = [0, 0x112244, 0x223366, 0x442266, 0x663300][Math.min(4, p.weapon)];
+  if (hunter.anim) {
+    // Personnage animé : on choisit simplement l'animation de déplacement
+    if (!(p.atk > 0 || p.skillT > 0 || p.dodgeT > 0)) hunter.play(moving ? hunter.cfg.run : hunter.cfg.idle);
+    for (const wm of hunter.weaponMats) wm.emissive.setHex(glowHex);
+    return;
+  }
   const tt = clock.elapsedTime;
   let armX = -0.15, armZ = 0, arm2X = -0.1, arm2Z = 0;
   if (moving) {
@@ -1394,11 +1532,13 @@ function tick() {
     }
     updateFx(dt);
     updateProjectiles(dt);
+    updateSnow(dt);
     for (const f of fires) f.scale.y = 1 + Math.sin(clock.elapsedTime * 12 + f.position.x) * 0.2;
     updateInteract();
     hudTimer -= dt;
     if (hudTimer <= 0) { hudTimer = 0.1; updateHud(); updateMarkers(); drawMap(); }
   }
+  if (hunter.mixer) hunter.mixer.update(dt);
   if (preview) updatePreview(dt); else updateCamera(dt);
   sky.position.copy(camera.position);
   updateDmgNums(dt);
@@ -1413,9 +1553,12 @@ let selCls = 'guerrier';
 function updatePreview(dt) {
   const g = hunter.g;
   g.rotation.y += dt * 0.6;
-  hunter.legL.rotation.x = hunter.legR.rotation.x = 0;
-  hunter.arm.rotation.set(-0.15 + Math.sin(clock.elapsedTime * 2) * 0.05, 0, 0);
-  hunter.arm2.rotation.set(-0.1, 0, 0);
+  if (hunter.anim) hunter.play(hunter.cfg.idle);
+  else {
+    hunter.legL.rotation.x = hunter.legR.rotation.x = 0;
+    hunter.arm.rotation.set(-0.15 + Math.sin(clock.elapsedTime * 2) * 0.05, 0, 0);
+    hunter.arm2.rotation.set(-0.1, 0, 0);
+  }
   const P = player.pos, portrait = innerHeight > innerWidth;
   g.position.copy(P);
   camera.position.set(P.x, P.y + (portrait ? 2.6 : 1.9), P.z + (portrait ? 7.5 : 5.2));

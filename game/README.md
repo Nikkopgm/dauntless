@@ -9,6 +9,8 @@ Puis ouvrir http://<ip-du-pc>:8000 sur le téléphone (même Wi-Fi), en paysage.
 « Ajouter à l'écran d'accueil » pour le lancer comme une appli.
 
 ## Contenu
+- Personnages 3D animés (course, attaques, sorts, esquive, mort)
+- Ambiance coucher de soleil, forêt enneigée avec chute de neige, îles flottantes, fleurs, grandes formations rocheuses
 - 5 classes jouables : Guerrier, Paladin, Voleur, Chasseur, Mage (compétence spéciale propre à chacune)
 - Textures procédurales (herbe, bois, tuiles, pierre, métal, cuir, écailles, fourrure), ciel en dégradé, reflets sur les armures
 - Monde ouvert 600×600 : village de Brumeval, Prés d'Or, Sylve Noire, Marais Brumeux, Crêtes de Braise
@@ -16,6 +18,10 @@ Puis ouvrir http://<ip-du-pc>:8000 sur le téléphone (même Wi-Fi), en paysage.
 - 10 quêtes enchaînées (tuer, récolter, livrer un message), 5 PNJ avec ❗ / ?
 - Combo à 3 coups, esquive avec invulnérabilité, compétence de zone, potions
 - Niveaux, XP, or, améliorations d'arme, mini-carte, sauvegarde automatique
+
+## Crédits
+Personnages 3D animés : « KayKit Adventurers » par Kay Lousberg (www.kaylousberg.com), licence CC0.
+Moteur 3D : three.js (licence MIT).
 
 ## Modifier le contenu
 Tout est dans `data.js` (monstres, PNJ, quêtes, objets). Le moteur est dans `main.js`.
