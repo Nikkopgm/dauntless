@@ -37,7 +37,7 @@
   <div id="actions">
     <button id="bInteract" class="act hidden">Parler</button>
     <button id="bPotion" class="act round sm">🧪<b id="potN">3</b></button>
-    <button id="bSkill" class="act round md">💥<i id="skCd"></i></button>
+    <button id="bSkill" class="act round md"><span id="skIco">💥</span><i id="skCd"></i></button>
     <button id="bDodge" class="act round md">💨</button>
     <button id="bAtk" class="act round lg">⚔️</button>
   </div>
@@ -59,7 +59,7 @@
 <div id="log" class="panel hidden">
   <h2>Journal de quêtes</h2>
   <div id="logList"></div>
-  <div class="row"><button id="bLogClose">Fermer</button><button id="bReset" class="ghost">Nouvelle partie</button></div>
+  <div class="row"><button id="bClass" class="ghost">Changer de classe</button><button id="bLogClose">Fermer</button><button id="bReset" class="ghost">Nouvelle partie</button></div>
 </div>
 
 <!-- Écran titre -->
@@ -68,6 +68,12 @@
   <p>Chassez les colosses des Terres Sauvages.<br>Explorez, aidez le village de Brumeval, devenez légende.</p>
   <button id="bPlay">Jouer</button>
   <p class="help">Mobile : joystick à gauche, glisser à droite pour la caméra.<br>Clavier : ZQSD/WASD, J attaque, Espace esquive, K compétence, R potion, E interagir.</p>
+</div>
+
+<div id="classSel" class="hidden">
+  <h2>Choisissez votre classe</h2>
+  <div id="classList"></div>
+  <button id="bStart">Commencer l'aventure</button>
 </div>
 
 <div id="dead" class="hidden"><h1>Vous êtes tombé…</h1><p>Retour au village.</p></div>

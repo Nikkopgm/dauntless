@@ -1,6 +1,46 @@
 // Contenu du jeu : zones, monstres, PNJ, objets et quêtes.
 // Ajouter une quête = ajouter une entrée dans QUESTS, rien d'autre à toucher.
 
+// Classes jouables. dmg = multiplicateur de dégâts, swing = durée d'un coup (s),
+// kind = 'melee' ou 'ranged', crit = chance de coup critique.
+export const CLASSES = {
+  guerrier: {
+    name: 'Guerrier', icon: '🪓', role: 'Corps à corps · Robuste',
+    desc: 'Colosse en armure de plaques, armé d\'une hache à deux mains. Encaisse les coups et frappe très fort.',
+    hp: 140, hpLvl: 20, dmg: 1.1, kind: 'melee', reach: 3.9, swing: 0.42, crit: 0.12, dodgeCost: 25,
+    skill: { name: 'Tourbillon', icon: '🌀', cd: 7, type: 'whirl', mult: 2.4, radius: 6.5, desc: 'Tournoie et frappe tout autour de lui.' },
+    stats: { Vie: 5, Dégâts: 4, Portée: 1, Soins: 1 },
+  },
+  paladin: {
+    name: 'Paladin', icon: '🛡️', role: 'Corps à corps · Soins',
+    desc: 'Champion de la lumière, masse et bouclier en main. Chacun de ses coups le soigne un peu.',
+    hp: 130, hpLvl: 18, dmg: 0.95, kind: 'melee', reach: 3.5, swing: 0.4, crit: 0.1, lifesteal: 0.15, dodgeCost: 25,
+    skill: { name: 'Lumière sacrée', icon: '✨', cd: 10, type: 'holy', mult: 1.8, radius: 7, heal: 0.35, desc: 'Explosion de lumière : soigne 35 % et blesse les ennemis proches.' },
+    stats: { Vie: 4, Dégâts: 3, Portée: 1, Soins: 5 },
+  },
+  voleur: {
+    name: 'Voleur', icon: '🗡️', role: 'Corps à corps · Critiques',
+    desc: 'Assassin agile aux deux dagues. Frappe vite, esquive souvent et porte des coups critiques dévastateurs.',
+    hp: 100, hpLvl: 14, dmg: 0.72, kind: 'melee', reach: 3.0, swing: 0.24, crit: 0.32, dodgeCost: 15,
+    skill: { name: 'Pas de l\'ombre', icon: '🌑', cd: 6, type: 'shadow', mult: 3.5, desc: 'Se téléporte dans le dos de l\'ennemi et le poignarde.' },
+    stats: { Vie: 2, Dégâts: 5, Portée: 1, Soins: 1 },
+  },
+  chasseur: {
+    name: 'Chasseur', icon: '🏹', role: 'Distance · Polyvalent',
+    desc: 'Archer des terres sauvages. Tire des flèches à longue portée et garde les monstres à distance.',
+    hp: 110, hpLvl: 15, dmg: 0.85, kind: 'ranged', range: 24, proj: 'arrow', swing: 0.42, crit: 0.15, dodgeCost: 20,
+    skill: { name: 'Pluie de flèches', icon: '🎯', cd: 8, type: 'rain', mult: 2.3, radius: 6, desc: 'Une volée de flèches s\'abat sur la zone ciblée.' },
+    stats: { Vie: 3, Dégâts: 3, Portée: 5, Soins: 1 },
+  },
+  mage: {
+    name: 'Mage', icon: '🔥', role: 'Distance · Dégâts de zone',
+    desc: 'Érudit des arcanes. Ses boules de feu explosent sur plusieurs ennemis, mais il est fragile.',
+    hp: 85, hpLvl: 12, dmg: 1.0, kind: 'ranged', range: 21, proj: 'fire', splash: 3, swing: 0.55, crit: 0.12, dodgeCost: 25,
+    skill: { name: 'Nova de givre', icon: '❄️', cd: 9, type: 'frost', mult: 2.0, radius: 8, desc: 'Gèle les ennemis autour de lui et les ralentit.' },
+    stats: { Vie: 1, Dégâts: 5, Portée: 4, Soins: 1 },
+  },
+};
+
 export const ZONES = {
   village: { name: 'Brumeval', hint: 'Un refuge sûr' },
   plains: { name: 'Prés d\'Or', hint: 'Niveau 1-3' },
@@ -13,12 +53,12 @@ export const ZONES = {
 export const MONSTERS = {
   sanglier: {
     name: 'Sanglier épineux', lvl: 1, hp: 45, speed: 5, size: 1, xp: 25, gold: 3, aggro: 12, leash: 35,
-    color: 0x7a5a3a, color2: 0x4a3420, horns: true,
+    color: 0x7a5a3a, color2: 0x4a3420, horns: true, fur: true,
     attacks: [{ type: 'bite', range: 1.5, windup: 0.7, dmg: 7 }],
   },
   loup: {
     name: 'Loup de cendre', lvl: 3, hp: 80, speed: 7, size: 1.1, xp: 45, gold: 5, aggro: 16, leash: 40,
-    color: 0x5a5a62, color2: 0x2a2a30, eye: 0xff5a2a, tail: true,
+    color: 0x5a5a62, color2: 0x2a2a30, eye: 0xff5a2a, tail: true, fur: true,
     attacks: [
       { type: 'bite', range: 1.5, windup: 0.55, dmg: 11 },
       { type: 'leap', radius: 2.2, windup: 0.9, dmg: 14, minRange: 5, maxRange: 11 },
@@ -43,7 +83,7 @@ export const MONSTERS = {
   // --- Colosses (boss)
   ronceroc: {
     name: 'Ronceroc, Colosse de la Sylve', lvl: 5, hp: 900, speed: 5, size: 3, xp: 450, gold: 80, aggro: 22, leash: 60, boss: true,
-    color: 0x4a5a2a, color2: 0x2a3418, eye: 0xb0ff4a, horns: true, spikes: true,
+    color: 0x4a5a2a, color2: 0x2a3418, eye: 0xb0ff4a, horns: true, spikes: true, fur: true,
     attacks: [
       { type: 'bite', range: 2, windup: 0.8, dmg: 20 },
       { type: 'slam', radius: 7, windup: 1.3, dmg: 30, maxRange: 7, recover: 1.4 },

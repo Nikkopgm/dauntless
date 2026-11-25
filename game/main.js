@@ -1,5 +1,7 @@
 import * as THREE from './lib/three.module.min.js';
-import { MONSTERS, SPAWNS, NPCS, QUESTS, ITEMS, ZONES } from './data.js';
+import { MONSTERS, SPAWNS, NPCS, QUESTS, ITEMS, ZONES, CLASSES } from './data.js';
+import { TEX, rep } from './textures.js';
+import { makeHero } from './heroes.js';
 
 // ====================================================================
 // Utilitaires
@@ -73,14 +75,41 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
-const SKY = new THREE.Color(0x9cc4e4);
+const SKY = new THREE.Color(0xc4dcec);
 scene.background = SKY.clone();
-scene.fog = new THREE.Fog(SKY.clone(), 60, 210);
+scene.fog = new THREE.Fog(SKY.clone(), 70, 230);
+// Ciel en dégradé (sphère qui suit la caméra)
+const sky = new THREE.Mesh(new THREE.SphereGeometry(450, 24, 12), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { top: { value: new THREE.Color(0x2f6fc0) }, bot: { value: SKY.clone() }, sunDir: { value: new THREE.Vector3(0.4, 0.75, 0.25).normalize() } },
+  vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform vec3 top; uniform vec3 bot; uniform vec3 sunDir; varying vec3 vP;
+    void main(){ float h = clamp(vP.y * 1.8 + 0.05, 0.0, 1.0); vec3 c = mix(bot, top, h);
+      float s = max(dot(vP, sunDir), 0.0); c += vec3(1.0, 0.85, 0.6) * (pow(s, 400.0) * 3.0 + pow(s, 12.0) * 0.25);
+      gl_FragColor = vec4(c, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+}));
+sky.renderOrder = -1;
+scene.add(sky);
+// Reflets du ciel sur les armures et armes en métal
+{
+  const envScene = new THREE.Scene();
+  const s2 = sky.clone(); s2.scale.setScalar(0.02); envScene.add(s2);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: 0x6a5a40 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -2; envScene.add(floor);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(envScene, 0.02).texture;
+  pm.dispose();
+}
 const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 600);
 
-scene.add(new THREE.HemisphereLight(0xdff0ff, 0x4a3b28, 0.9));
-const sun = new THREE.DirectionalLight(0xfff1d6, 1.6);
+scene.add(new THREE.HemisphereLight(0xdff0ff, 0x5a4a30, 1.1));
+const sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 });
@@ -120,7 +149,7 @@ const ZCOL = {
     const d = Math.hypot(x, z);
     c.lerp(ZCOL.village, 1 - smooth(20, 45, d));
     const n = fbm(x * 0.15, z * 0.15) * 0.25 + 0.85;
-    c.multiplyScalar(n);
+    c.multiplyScalar(n * 1.15);
     if (h < WATER + 0.6) c.lerp(new THREE.Color(0.55, 0.5, 0.36), 0.6);
     if (h > 18) c.lerp(new THREE.Color(0.45, 0.42, 0.4), smooth(18, 35, h));
     if (w.volcanic > 0.5 && fbm(x * 0.08, z * 0.08) > 0.68) c.lerp(new THREE.Color(0.9, 0.35, 0.1), 0.6);
@@ -128,12 +157,12 @@ const ZCOL = {
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, map: TEX.ground }));
   mesh.receiveShadow = true;
   scene.add(mesh);
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 2, WORLD * 2),
-    new THREE.MeshPhongMaterial({ color: 0x3f7f8f, transparent: true, opacity: 0.75, shininess: 80 }));
+    new THREE.MeshStandardMaterial({ color: 0x2f6f84, transparent: true, opacity: 0.8, roughness: 0.08, metalness: 0.3 }));
   water.rotation.x = -Math.PI / 2;
   water.position.y = WATER;
   scene.add(water);
@@ -188,10 +217,10 @@ function pushOut(p, radius) {
   const roundG = new THREE.IcosahedronGeometry(2.4, 0); roundG.translate(0, 4.2, 0);
   const deadG = new THREE.CylinderGeometry(0.15, 0.35, 5, 5); deadG.translate(0, 2.5, 0);
   const rockG = new THREE.DodecahedronGeometry(1.4, 0);
-  const trunkM = new THREE.MeshLambertMaterial({ color: 0x5a3d24 });
-  const leafM = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const deadM = new THREE.MeshLambertMaterial({ color: 0x3b3228 });
-  const rockM = new THREE.MeshLambertMaterial({ color: 0x8a847a });
+  const trunkM = new THREE.MeshLambertMaterial({ color: 0x6a4a2c, map: rep(TEX.bark, 1, 2) });
+  const leafM = new THREE.MeshLambertMaterial({ color: 0xffffff, map: rep(TEX.leaves, 3) });
+  const deadM = new THREE.MeshLambertMaterial({ color: 0x4b4238, map: rep(TEX.bark, 1, 3) });
+  const rockM = new THREE.MeshLambertMaterial({ color: 0xffffff, map: TEX.stone });
 
   function inst(geo, mat, list, colorFn, scaleFn, collR) {
     const m = new THREE.InstancedMesh(geo, mat, list.length);
@@ -217,30 +246,70 @@ function pushOut(p, radius) {
   inst(pineG, leafM, pines, (c) => c.setHSL(rand(0.28, 0.36), 0.5, rand(0.18, 0.28)), () => scales[si++]);
   inst(roundG, leafM, rounds, (c) => c.setHSL(rand(0.22, 0.3), 0.55, rand(0.3, 0.42)), () => scales[si++]);
   inst(deadG, deadM, deads, null, null, 0.4);
-  inst(rockG, rockM, rocks, (c) => c.setHSL(0.08, 0.08, rand(0.3, 0.55)), () => rand(0.6, 2.2), 1.3);
+  inst(rockG, rockM, rocks, (c) => c.setHSL(0.08, 0.05, rand(0.8, 1.0)), () => rand(0.6, 2.2), 1.3);
+}
+
+// --- Touffes d'herbe (un seul appel de dessin pour des milliers de touffes)
+{
+  const a = new THREE.PlaneGeometry(1.4, 0.9).translate(0, 0.42, 0).toNonIndexed();
+  const b = a.clone().rotateY(Math.PI / 2);
+  const geo = new THREE.BufferGeometry();
+  for (const k of ['position', 'normal', 'uv']) {
+    const A = a.attributes[k], B = b.attributes[k];
+    const arr = new Float32Array(A.array.length + B.array.length); arr.set(A.array); arr.set(B.array, A.array.length);
+    geo.setAttribute(k, new THREE.BufferAttribute(arr, A.itemSize));
+  }
+  // Normales vers le haut : éclairage homogène comme le sol
+  const nrm = geo.attributes.normal; for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
+  // Matériau non éclairé : les deux faces de la touffe ont la même teinte
+  const mat = new THREE.MeshBasicMaterial({ alphaMap: TEX.grass, alphaTest: 0.5, side: THREE.DoubleSide });
+  const N = 7000, m = new THREE.InstancedMesh(geo, mat, N);
+  const dm = new THREE.Object3D(), col = new THREE.Color();
+  let n = 0;
+  for (let i = 0; i < N * 3 && n < N; i++) {
+    const x = rand(-WORLD + 15, WORLD - 15), z = rand(-WORLD + 15, WORLD - 15), h = heightAt(x, z), d = Math.hypot(x, z);
+    if (h < WATER + 0.4 || d < 16) continue;
+    const zn = zoneAt(x, z);
+    if (zn === 'volcanic' || (zn === 'village' && Math.random() < 0.6)) continue;
+    dm.position.set(x, h - 0.05, z); dm.rotation.set(0, rand(0, 3), 0); dm.scale.setScalar(rand(0.7, 1.4)); dm.updateMatrix();
+    m.setMatrixAt(n, dm.matrix);
+    col.copy(ZCOL[zn === 'village' ? 'plains' : zn]).multiplyScalar(rand(0.45, 0.65));
+    m.setColorAt(n, col);
+    n++;
+  }
+  m.count = n;
+  scene.add(m);
 }
 
 // --- Village & avant-poste
 const lambert = (c) => new THREE.MeshLambertMaterial({ color: c });
 function house(x, z, rot, wallC = 0xcbb08a, roofC = 0x8a3b2a) {
   const g = new THREE.Group();
-  const walls = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 6), lambert(wallC)); walls.position.y = 2;
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(5.6, 3.5, 4), lambert(roofC)); roof.position.y = 5.75; roof.rotation.y = Math.PI / 4;
-  const door = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.4, 0.2), lambert(0x4a2e18)); door.position.set(0, 1.2, 3.05);
-  g.add(walls, roof, door);
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 6), new THREE.MeshLambertMaterial({ color: wallC, map: rep(TEX.planks, 2, 1) })); walls.position.y = 2;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.9, 6.4), new THREE.MeshLambertMaterial({ color: 0xb0aaa0, map: rep(TEX.stone, 2, 0.3) })); base.position.y = 0.3;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(5.6, 3.5, 4, 1), new THREE.MeshLambertMaterial({ color: roofC, map: rep(TEX.tiles, 3, 2) })); roof.position.y = 5.75; roof.rotation.y = Math.PI / 4;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.4, 0.2), new THREE.MeshLambertMaterial({ color: 0x6a4020, map: TEX.planks })); door.position.set(0, 1.2, 3.05);
+  const beamM = new THREE.MeshLambertMaterial({ color: 0x4a2e18, map: TEX.bark });
+  for (const [bx, bz] of [[-3.5, -3], [3.5, -3], [-3.5, 3], [3.5, 3]]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4, 0.35), beamM); post.position.set(bx, 2, bz); g.add(post);
+  }
+  const winM = new THREE.MeshLambertMaterial({ color: 0xffd27a, emissive: 0x6a4010 });
+  for (const wx of [-2.2, 2.2]) { const w = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.1), winM); w.position.set(wx, 2.4, 3.03); g.add(w); }
+  const chim = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.2, 0.8), new THREE.MeshLambertMaterial({ color: 0x9a948a, map: rep(TEX.stone, 0.5) })); chim.position.set(1.8, 6.2, -1); g.add(chim);
+  g.add(walls, base, roof, door);
   g.traverse((o) => { o.castShadow = o.receiveShadow = true; });
   g.position.set(x, heightAt(x, z), z); g.rotation.y = rot;
   scene.add(g);
   addCollider(x, z, 4.2);
 }
-house(-18, -14, 0.6); house(18, -16, -0.6); house(-22, 12, 2.2, 0xb8a07a, 0x3b5a8a); house(20, 15, -2.3); house(0, 26, Math.PI, 0xd8c09a, 0x5a6b2a);
+house(-18, -14, 0.6, 0xd8b890, 0xb04a32); house(18, -16, -0.6, 0xd8b890, 0xb04a32); house(-22, 12, 2.2, 0xc8a880, 0x4a6aa0); house(20, 15, -2.3, 0xd8b890, 0xb04a32); house(0, 26, Math.PI, 0xe0c8a0, 0x6a7b3a);
 {
   // Puits & feu de camp
-  const well = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 1.2, 10), lambert(0x7a7368));
+  const well = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 1.2, 14), new THREE.MeshLambertMaterial({ color: 0xb0aaa0, map: rep(TEX.stone, 2, 0.5) }));
   well.position.set(0, 0.6, 0); well.castShadow = true; scene.add(well); addCollider(0, 0, 1.6);
   // Tour de l'avant-poste nord
   const tz = -112, tx = 7;
-  const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.6, 10, 8), lambert(0x6d5a44));
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.6, 10, 10), new THREE.MeshLambertMaterial({ color: 0xa09a90, map: rep(TEX.stone, 3, 3) }));
   tower.position.set(tx, heightAt(tx, tz) + 5, tz); tower.castShadow = true; scene.add(tower); addCollider(tx, tz, 2.7);
   const flag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.4, 2), lambert(0xc98a1e));
   flag.position.set(tx, heightAt(tx, tz) + 11.5, tz + 1); scene.add(flag);
@@ -259,41 +328,26 @@ campfire(6, 6); campfire(-4, -108);
 // ====================================================================
 // Joueur
 // ====================================================================
-function makeHunter() {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 1.3, 8), lambert(0x2f4f6f)); body.position.y = 1.25;
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.57, 0.57, 0.18, 8), lambert(0x5a3a1a)); belt.position.y = 0.8;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 8), lambert(0xe8c4a0)); head.position.y = 2.2;
-  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.6, 8), lambert(0x8a2a1a)); hood.position.y = 2.55;
-  const cape = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.08), lambert(0x8a2a1a)); cape.position.set(0, 1.3, -0.5); cape.rotation.x = 0.15;
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.7, 0.25), lambert(0x3a2a1a)); legL.position.set(-0.2, 0.35, 0);
-  const legR = legL.clone(); legR.position.x = 0.2;
-  // Bras + arme : la grande hache est accrochée à un pivot d'épaule
-  const arm = new THREE.Group(); arm.position.set(0.55, 1.7, 0);
-  const weapon = new THREE.Group();
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), lambert(0x4a2e18)); handle.position.y = -1.0;
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 1.0), new THREE.MeshLambertMaterial({ color: 0xcfd6dc, emissive: 0x000000 }));
-  blade.position.set(0, -1.9, 0.35);
-  weapon.add(handle, blade);
-  weapon.rotation.x = -Math.PI / 2; // pointe vers l'avant
-  arm.add(weapon);
-  g.add(body, belt, head, hood, cape, legL, legR, arm);
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { g, arm, legL, legR, blade };
-}
-
-const hunter = makeHunter();
+let hunter = makeHero('guerrier');
 scene.add(hunter.g);
+function setHeroModel(id) {
+  scene.remove(hunter.g);
+  hunter = makeHero(id);
+  hunter.g.position.copy(player.pos);
+  scene.add(hunter.g);
+}
 
 const player = {
   pos: new THREE.Vector3(0, 0, 8), rot: Math.PI, hp: 100, maxHp: 100, st: 100,
-  level: 1, xp: 0, gold: 0, weapon: 0, potions: 3,
+  level: 1, xp: 0, gold: 0, weapon: 0, potions: 3, cls: null,
   atk: 0, atkT: 0, combo: 0, queued: false, hitDone: false, comboTimer: 0,
   dodgeT: 0, dodgeDir: new THREE.Vector3(), skillCd: 0, skillT: 0, potionCd: 0,
   lastHurt: -99, dead: false, inv: {},
 };
 const xpNext = (l) => Math.round(100 * Math.pow(l, 1.5));
-const playerDmg = () => (10 + 3 * player.level) * (1 + 0.3 * player.weapon);
+const CLS = () => CLASSES[player.cls || 'guerrier'];
+const maxHpFor = (lvl) => CLS().hp + CLS().hpLvl * (lvl - 1);
+const playerDmg = () => (10 + 3 * player.level) * (1 + 0.3 * player.weapon) * CLS().dmg;
 
 // ====================================================================
 // Monstres
@@ -307,7 +361,9 @@ const teleMat = () => new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent
 function makeMonsterMesh(def) {
   const g = new THREE.Group();
   const s = def.size;
-  const mat = lambert(def.color), mat2 = lambert(def.color2);
+  const skinTex = def.fur ? TEX.fur : TEX.scales;
+  const mat = new THREE.MeshStandardMaterial({ color: def.color, map: rep(skinTex, 2), roughness: 0.85 });
+  const mat2 = new THREE.MeshStandardMaterial({ color: def.color2, map: skinTex, roughness: 0.8 });
   const body = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), mat);
   body.scale.set(s * 0.8, s * 0.6, s * 1.1); body.position.y = s * 0.9;
   const head = new THREE.Mesh(new THREE.BoxGeometry(s * 0.8, s * 0.6, s * 0.7), mat2);
@@ -362,7 +418,7 @@ function spawnMonster(type, x, z, home) {
   const mon = {
     type, def, mesh: m, pos: new THREE.Vector3(x, heightAt(x, z), z), home: home || new THREE.Vector3(x, 0, z),
     rot: rand(0, 6.28), hp: def.hp, maxHp: def.hp, state: 'idle', t: rand(0, 3), wanderTo: null,
-    atk: null, tele: null, cd: rand(0.5, 1.5), dead: false, respawnT: 0, flash: 0, enraged: false, walk: 0,
+    atk: null, tele: null, cd: rand(0.5, 1.5), dead: false, respawnT: 0, flash: 0, enraged: false, walk: 0, slowT: 0,
   };
   m.g.position.copy(mon.pos);
   scene.add(m.g);
@@ -452,20 +508,21 @@ const pickups = [];
 let Q = {}; // id -> { s: 'active'|'done', p: [..] }
 const SAVE_KEY = 'echo-colosses-v1';
 function save() {
-  const { level, xp, gold, weapon, potions, inv } = player;
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ level, xp, gold, weapon, potions, inv, Q })); } catch (e) { /* stockage indisponible */ }
+  const { level, xp, gold, weapon, potions, inv, cls } = player;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ level, xp, gold, weapon, potions, inv, cls, Q })); } catch (e) { /* stockage indisponible */ }
 }
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (!d) return;
-    Object.assign(player, { level: d.level, xp: d.xp, gold: d.gold, weapon: d.weapon, potions: d.potions, inv: d.inv || {} });
+    Object.assign(player, { level: d.level, xp: d.xp, gold: d.gold, weapon: d.weapon, potions: d.potions, inv: d.inv || {}, cls: CLASSES[d.cls] ? d.cls : null });
     Q = d.Q || {};
   } catch (e) { /* sauvegarde illisible : on repart de zéro */ }
-  player.maxHp = 100 + 15 * (player.level - 1);
+  player.maxHp = maxHpFor(player.level);
   player.hp = player.maxHp;
 }
 load();
+if (player.cls) setHeroModel(player.cls);
 
 const qById = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
 const qAvailable = (q) => !Q[q.id] && (q.req || []).every((r) => Q[r]?.s === 'done') && player.level >= (q.minLvl || 1);
@@ -610,7 +667,7 @@ function gainXp(n) {
   while (player.xp >= xpNext(player.level)) {
     player.xp -= xpNext(player.level);
     player.level++;
-    player.maxHp += 15; player.hp = player.maxHp;
+    player.maxHp = maxHpFor(player.level); player.hp = player.maxHp;
     toast(`⭐ Niveau ${player.level} !`);
   }
   save();
@@ -625,10 +682,11 @@ function openLog() {
   });
   const avail = QUESTS.filter(qAvailable).map((q) => `<div class="q">❗ <b>${q.title}</b> — voir ${NPCS[q.giver].name}</div>`);
   $('logList').innerHTML = (list.concat(avail).join('') || '<p>Aucune quête pour le moment. Cherchez les ❗ au village.</p>')
-    + `<p><small>Niveau ${player.level} · Arme +${player.weapon} · ${player.gold} 🪙</small></p>`;
+    + `<p><small>${CLS().icon} ${CLS().name} · Niveau ${player.level} · Arme +${player.weapon} · ${player.gold} 🪙</small></p>`;
   $('log').classList.remove('hidden');
 }
 $('bLog').onclick = openLog;
+$('bClass').onclick = () => { $('log').classList.add('hidden'); uiOpen = false; showClassSelect(); };
 $('bLogClose').onclick = () => { $('log').classList.add('hidden'); uiOpen = false; };
 $('bReset').onclick = () => {
   if (!confirm('Effacer la progression et recommencer ?')) return;
@@ -721,12 +779,13 @@ function attack() {
 function startSwing() {
   player.combo = player.comboTimer > 0 ? (player.combo % 3) + 1 : 1;
   player.atk = player.combo; player.atkT = 0; player.hitDone = false; player.queued = false;
-  const t = nearestMonster(7);
+  const t = nearestMonster(CLS().kind === 'ranged' ? CLS().range : 7);
   if (t) player.rot = Math.atan2(t.pos.x - player.pos.x, t.pos.z - player.pos.z);
 }
 function dodge() {
-  if (player.dead || player.dodgeT > 0 || player.st < 25) return;
-  player.st -= 25;
+  const cost = CLS().dodgeCost;
+  if (player.dead || player.dodgeT > 0 || player.st < cost) return;
+  player.st -= cost;
   player.atk = 0; player.queued = false;
   let dx = input.mx, dz = input.mz;
   const kx = (input.keys.KeyD || input.keys.ArrowRight ? 1 : 0) - (input.keys.KeyA || input.keys.KeyQ || input.keys.ArrowLeft ? 1 : 0);
@@ -738,7 +797,9 @@ function dodge() {
 }
 function skill() {
   if (player.dead || player.skillCd > 0 || player.dodgeT > 0) return;
-  player.skillCd = 8; player.skillT = 0.6; player.atk = 0; player.hitDone = false;
+  const S = CLS().skill;
+  player.skillCd = S.cd; player.skillT = 0.6; player.atk = 0; player.hitDone = false;
+  if (S.type === 'shadow') shadowStep(S);
 }
 function potion() {
   if (player.dead || player.potions <= 0 || player.potionCd > 0 || player.hp >= player.maxHp) return;
@@ -771,13 +832,14 @@ function moveDir(ix, iz) {
 }
 
 function hitMonster(m, dmg, crit) {
-  if (m.dead) return;
+  if (m.dead) return 0;
   const d = Math.round(dmg * (crit ? 1.6 : 1) * rand(0.9, 1.1));
   m.hp -= d; m.flash = 0.12;
   if (m.state === 'idle' || m.state === 'return') m.state = 'chase';
   dmgNum(m.pos.clone().setY(m.pos.y + m.def.size * 2), d, crit ? 'crit' : '');
   if (m.def.boss && !m.enraged && m.hp < m.maxHp * 0.4) { m.enraged = true; toast(`${m.def.name} entre en furie !`); }
   if (m.hp <= 0) killMonster(m);
+  return d;
 }
 function killMonster(m) {
   m.dead = true; m.state = 'dead'; m.respawnT = m.def.boss ? 120 : 30;
@@ -793,7 +855,7 @@ function killMonster(m) {
   save();
 }
 function hurtPlayer(dmg, from) {
-  if (player.dead || player.dodgeT > 0) return;
+  if (player.dead || player.dodgeT > 0 || (player.skillT > 0 && CLS().skill.type === 'shadow')) return;
   player.hp -= dmg; player.lastHurt = clock.elapsedTime;
   dmgNum(player.pos.clone().setY(player.pos.y + 2.4), `-${dmg}`, 'hurt');
   if (from) { // petit recul
@@ -885,7 +947,8 @@ function updateMonster(m, dt) {
     return;
   }
   const def = m.def, toP = player.pos.distanceTo(m.pos), homeD = Math.hypot(m.pos.x - m.home.x, m.pos.z - m.home.z);
-  const speed = def.speed * (m.enraged ? 1.3 : 1);
+  m.slowT = Math.max(0, m.slowT - dt);
+  const speed = def.speed * (m.enraged ? 1.3 : 1) * (m.slowT > 0 ? 0.45 : 1);
   let moving = false;
   m.cd -= dt;
 
@@ -949,7 +1012,7 @@ function updateMonster(m, dt) {
   if (moving) { m.walk += dt * speed * 2; m.mesh.legs.forEach((l, i) => { l.rotation.x = Math.sin(m.walk + (i % 2) * Math.PI) * 0.6; }); }
   // Flash de dégâts
   m.flash -= dt;
-  m.mesh.body.material.emissive?.setHex(m.flash > 0 ? 0x884422 : (m.enraged ? 0x331000 : 0));
+  m.mesh.body.material.emissive.setHex(m.flash > 0 ? 0x884422 : m.slowT > 0 ? 0x1a3a66 : (m.enraged ? 0x331000 : 0));
   // Barre de vie
   const show = m.hp < m.maxHp && toP < 40;
   m.mesh.hb.visible = show && !def.boss;
@@ -1003,10 +1066,10 @@ function drawMap() {
 // Boucle de jeu
 // ====================================================================
 const clock = new THREE.Clock();
-let shake = 0, started = false, hudTimer = 0, lastZone = '';
+let shake = 0, started = false, hudTimer = 0, lastZone = '', preview = false;
 
 function updatePlayer(dt) {
-  const p = player;
+  const p = player, C = CLS();
   if (p.dead) return;
   p.skillCd = Math.max(0, p.skillCd - dt);
   p.potionCd = Math.max(0, p.potionCd - dt);
@@ -1023,31 +1086,31 @@ function updatePlayer(dt) {
   const mag = Math.min(1, Math.hypot(ix, iz));
   let moving = false;
   const inWater = heightAt(p.pos.x, p.pos.z) < WATER - 0.3;
+  const swingDur = () => (p.atk === 3 ? C.swing * 1.4 : C.swing);
 
   if (p.dodgeT > 0) {
     p.dodgeT -= dt;
     p.pos.addScaledVector(p.dodgeDir, 22 * dt);
-    hunter.g.rotation.x = 0;
   } else if (p.skillT > 0) {
     p.skillT -= dt;
-    if (!p.hitDone && p.skillT < 0.25) {
-      p.hitDone = true; shake = 0.4;
-      for (const m of monsters) if (!m.dead && m.pos.distanceTo(p.pos) < 6.5 + m.def.size) hitMonster(m, playerDmg() * 2.6, true);
-      shockwave(p.pos);
-    }
+    if (!p.hitDone && p.skillT < 0.3) { p.hitDone = true; castSkill(C.skill); }
   } else if (p.atk > 0) {
     p.atkT += dt;
-    const dur = p.atk === 3 ? 0.55 : 0.38;
-    if (p.atkT < 0.12) p.pos.addScaledVector(new THREE.Vector3(Math.sin(p.rot), 0, Math.cos(p.rot)), 5 * dt);
+    const dur = swingDur();
+    if (C.kind === 'melee' && p.atkT < 0.12) p.pos.addScaledVector(new THREE.Vector3(Math.sin(p.rot), 0, Math.cos(p.rot)), 5 * dt);
     if (!p.hitDone && p.atkT > dur * 0.45) {
       p.hitDone = true;
-      const reach = p.atk === 3 ? 4.2 : 3.6;
-      for (const m of monsters) {
-        if (m.dead) continue;
-        const dx = m.pos.x - p.pos.x, dz = m.pos.z - p.pos.z, d = Math.hypot(dx, dz);
-        if (d > reach + m.def.size) continue;
-        if (Math.abs(angDiff(p.rot, Math.atan2(dx, dz))) > 1.2 && d > m.def.size + 1) continue;
-        hitMonster(m, playerDmg() * (p.atk === 3 ? 1.7 : 1), p.atk === 3 || Math.random() < 0.12);
+      if (C.kind === 'ranged') fireProjectile(p.atk === 3);
+      else {
+        const reach = C.reach * (p.atk === 3 ? 1.15 : 1);
+        for (const m of monsters) {
+          if (m.dead) continue;
+          const dx = m.pos.x - p.pos.x, dz = m.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+          if (d > reach + m.def.size) continue;
+          if (Math.abs(angDiff(p.rot, Math.atan2(dx, dz))) > 1.2 && d > m.def.size + 1) continue;
+          const dealt = hitMonster(m, playerDmg() * (p.atk === 3 ? 1.7 : 1), p.atk === 3 || Math.random() < C.crit);
+          if (C.lifesteal && dealt) p.hp = Math.min(p.maxHp, p.hp + dealt * C.lifesteal);
+        }
       }
     }
     if (p.atkT >= dur) {
@@ -1072,34 +1135,183 @@ function updatePlayer(dt) {
   g.position.copy(p.pos);
   g.rotation.y = p.rot;
   const tt = clock.elapsedTime;
+  let armX = -0.15, armZ = 0, arm2X = -0.1, arm2Z = 0;
   if (moving) {
     const s = Math.sin(tt * 14);
     hunter.legL.rotation.x = s * 0.7; hunter.legR.rotation.x = -s * 0.7;
-    g.position.y += Math.abs(s) * 0.1;
+    armX = -0.15 - s * 0.5; arm2X = -0.1 + s * 0.5;
+    g.position.y += Math.abs(s) * 0.08;
   } else { hunter.legL.rotation.x *= 0.8; hunter.legR.rotation.x *= 0.8; }
-  let armX = -0.3, armZ = 0;
+  let snap = false;
   if (p.atk > 0) {
-    const dur = p.atk === 3 ? 0.55 : 0.38, k2 = clamp(p.atkT / dur, 0, 1);
-    if (p.atk === 1) { armX = lerp(-2.4, 1.2, k2); }
-    else if (p.atk === 2) { armX = 0.2; armZ = lerp(1.6, -1.6, k2); }
-    else { armX = lerp(-2.8, 1.4, Math.pow(k2, 0.6)); }
+    snap = true;
+    const k2 = clamp(p.atkT / swingDur(), 0, 1);
+    if (C.kind === 'ranged') {
+      // Visée : bras tendus vers l'avant
+      if (C.proj === 'arrow') { arm2X = -1.55; armX = -1.5; armZ = lerp(0, 0.5, Math.min(1, k2 * 2)); }
+      else { armX = lerp(-0.6, -1.6, Math.min(1, k2 * 2)); arm2X = -1.2; }
+    } else if (player.cls === 'voleur') {
+      // Coups alternés des deux dagues
+      if (p.atk === 2) { arm2X = lerp(-2.0, 0.4, k2); armX = -0.5; } else { armX = lerp(-2.0, 0.4, k2); arm2X = -0.5; }
+    } else if (p.atk === 1) { armX = lerp(-2.6, 0.6, k2); }
+    else if (p.atk === 2) { armX = -1.4; armZ = lerp(1.4, -1.0, k2); }
+    else { armX = lerp(-3.0, 0.8, Math.pow(k2, 0.6)); arm2X = armX * 0.6; }
   } else if (p.skillT > 0) {
-    armX = p.skillT > 0.25 ? -2.9 : 1.5;
-    g.position.y += p.skillT > 0.25 ? (0.6 - p.skillT) * 3 : 0;
+    snap = true;
+    const t = C.skill.type;
+    if (t === 'whirl') { armX = -1.5; armZ = 1.2; arm2X = -1.5; arm2Z = -1.2; g.rotation.y = p.rot + (0.6 - p.skillT) * 26; }
+    else if (t === 'rain') { armX = -2.4; arm2X = -2.5; }
+    else if (t === 'shadow') { armX = 0.6; arm2X = 0.6; g.position.y -= 0.3; }
+    else { armX = -2.9; arm2X = -2.9; g.position.y += p.skillT > 0.3 ? (0.6 - p.skillT) * 1.5 : 0; }
   } else if (p.dodgeT > 0) {
     g.position.y -= 0.4;
   }
-  hunter.arm.rotation.x = lerp(hunter.arm.rotation.x, armX, p.atk > 0 || p.skillT > 0 ? 1 : 0.2);
-  hunter.arm.rotation.z = lerp(hunter.arm.rotation.z, armZ, p.atk > 0 ? 1 : 0.2);
-  hunter.blade.material.emissive.setHex(p.weapon > 0 ? [0, 0x112244, 0x223366, 0x442266, 0x663300][Math.min(4, p.weapon)] : 0);
+  const blend = snap ? 1 : 0.2;
+  hunter.arm.rotation.x = lerp(hunter.arm.rotation.x, armX, blend);
+  hunter.arm.rotation.z = lerp(hunter.arm.rotation.z, armZ, blend);
+  hunter.arm2.rotation.x = lerp(hunter.arm2.rotation.x, arm2X, blend);
+  hunter.arm2.rotation.z = lerp(hunter.arm2.rotation.z, arm2Z, blend);
+  const glow = [0, 0x112244, 0x223366, 0x442266, 0x663300][Math.min(4, p.weapon)];
+  for (const wm of hunter.weaponMats) if (player.cls !== 'mage') wm.emissive.setHex(glow);
 }
 
-// Onde de choc visuelle
-const waves = [];
-function shockwave(pos) {
-  const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.9, depthWrite: false }));
-  m.position.set(pos.x, pos.y + 0.3, pos.z);
-  scene.add(m); waves.push({ m, t: 0 });
+// ---------- Effets temporaires (ondes, projectiles visuels, dégâts différés)
+const fx = [];
+function addFx(dur, upd, end) { fx.push({ t: 0, dur, upd, end }); }
+function updateFx(dt) {
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const f = fx[i]; f.t += dt;
+    if (f.upd) f.upd(Math.min(1, f.t / f.dur), dt);
+    if (f.t >= f.dur) { fx.splice(i, 1); if (f.end) f.end(); }
+  }
+}
+function shockwave(pos, color = 0xffd27a, radius = 8) {
+  const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+  m.position.set(pos.x, heightAt(pos.x, pos.z) + 0.3, pos.z);
+  scene.add(m);
+  addFx(0.4, (k) => { m.scale.setScalar(0.5 + k * radius); m.material.opacity = 0.9 * (1 - k); }, () => { scene.remove(m); m.material.dispose(); });
+}
+function aoe(center, radius, dmg, onHit) {
+  for (const m of monsters) {
+    if (m.dead || Math.hypot(m.pos.x - center.x, m.pos.z - center.z) > radius + m.def.size) continue;
+    hitMonster(m, dmg, true);
+    if (onHit) onHit(m);
+  }
+}
+
+function castSkill(S) {
+  const p = player, dmg = playerDmg() * S.mult;
+  if (S.type === 'whirl') {
+    aoe(p.pos, S.radius, dmg); shockwave(p.pos, 0xffffff, S.radius); shake = 0.3;
+  } else if (S.type === 'holy') {
+    const heal = Math.round(p.maxHp * S.heal);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    dmgNum(p.pos.clone().setY(p.pos.y + 2.5), `+${heal}`, 'heal');
+    aoe(p.pos, S.radius, dmg); shockwave(p.pos, 0xffe066, S.radius);
+    pillar(p.pos, 0xfff0a0);
+  } else if (S.type === 'frost') {
+    aoe(p.pos, S.radius, dmg, (m) => { m.slowT = 4; });
+    shockwave(p.pos, 0x9ad8ff, S.radius); shake = 0.25;
+  } else if (S.type === 'rain') {
+    const t = nearestMonster(CLS().range);
+    const c = t ? t.pos.clone() : p.pos.clone().add(new THREE.Vector3(Math.sin(p.rot) * 10, 0, Math.cos(p.rot) * 10));
+    arrowRain(c, S.radius);
+    addFx(0.45, null, () => { aoe(c, S.radius, dmg); shockwave(c, 0x9aff7a, S.radius); });
+  }
+}
+
+function shadowStep(S) {
+  const p = player, t = nearestMonster(16);
+  shockwave(p.pos, 0x6a3a9a, 3);
+  if (t) {
+    const back = t.rot + Math.PI;
+    p.pos.set(t.pos.x + Math.sin(back) * (t.def.size + 1.2), 0, t.pos.z + Math.cos(back) * (t.def.size + 1.2));
+    p.rot = Math.atan2(t.pos.x - p.pos.x, t.pos.z - p.pos.z);
+    hitMonster(t, playerDmg() * S.mult, true);
+  } else {
+    p.pos.x += Math.sin(p.rot) * 8; p.pos.z += Math.cos(p.rot) * 8;
+  }
+  pushOut(p.pos, 0.5);
+  p.hitDone = true;
+  p.dodgeT = 0; // invulnérable pendant l'animation grâce au skillT
+  shockwave(p.pos, 0x6a3a9a, 3);
+}
+
+function pillar(pos, color) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 14, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+  m.position.set(pos.x, pos.y + 7, pos.z);
+  scene.add(m);
+  addFx(0.6, (k) => { m.material.opacity = 0.5 * (1 - k); m.scale.x = m.scale.z = 1 + k; }, () => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+}
+
+// ---------- Projectiles (flèches, boules de feu)
+const arrowGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.1, 5).rotateX(Math.PI / 2);
+const arrowTipGeo = new THREE.ConeGeometry(0.08, 0.25, 5).rotateX(Math.PI / 2).translate(0, 0, 0.6);
+const arrowMat = new THREE.MeshBasicMaterial({ color: 0x6a4a2a }), tipMat = new THREE.MeshBasicMaterial({ color: 0xdddddd });
+function makeArrow() { const g = new THREE.Group(); g.add(new THREE.Mesh(arrowGeo, arrowMat), new THREE.Mesh(arrowTipGeo, tipMat)); return g; }
+const fireGeo = new THREE.SphereGeometry(0.35, 10, 8);
+const fireMat = new THREE.MeshBasicMaterial({ color: 0xffb040 });
+const fireHaloMat = new THREE.MeshBasicMaterial({ color: 0xff4a10, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+const projectiles = [];
+
+function fireProjectile(big) {
+  const p = player, C = CLS();
+  const target = nearestMonster(C.range);
+  const from = p.pos.clone().add(new THREE.Vector3(Math.sin(p.rot) * 0.8, 1.6, Math.cos(p.rot) * 0.8));
+  let mesh;
+  if (C.proj === 'fire') {
+    mesh = new THREE.Group();
+    mesh.add(new THREE.Mesh(fireGeo, fireMat));
+    const halo = new THREE.Mesh(fireGeo, fireHaloMat); halo.scale.setScalar(1.8); mesh.add(halo);
+    if (big) mesh.scale.setScalar(1.5);
+  } else mesh = makeArrow();
+  mesh.position.copy(from);
+  scene.add(mesh);
+  const dir = new THREE.Vector3(Math.sin(p.rot), 0, Math.cos(p.rot));
+  projectiles.push({
+    mesh, pos: from, dir, target, life: 1.6, speed: C.proj === 'fire' ? 28 : 45,
+    dmg: playerDmg() * (big ? 1.6 : 1), crit: big || Math.random() < C.crit, splash: C.splash || 0,
+  });
+}
+function explode(pr) {
+  if (pr.splash) {
+    for (const m of monsters) if (!m.dead && m !== pr.hit && m.pos.distanceTo(pr.pos) < pr.splash + m.def.size) hitMonster(m, pr.dmg * 0.6, false);
+    shockwave(pr.pos, 0xff7a20, pr.splash);
+  }
+  scene.remove(pr.mesh);
+}
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const pr = projectiles[i];
+    pr.life -= dt;
+    if (pr.target && !pr.target.dead) {
+      const aim = pr.target.pos.clone().setY(pr.target.pos.y + pr.target.def.size * 0.9).sub(pr.pos).normalize();
+      pr.dir.lerp(aim, Math.min(1, dt * 12)).normalize();
+    }
+    pr.pos.addScaledVector(pr.dir, pr.speed * dt);
+    pr.mesh.position.copy(pr.pos);
+    pr.mesh.lookAt(pr.pos.clone().add(pr.dir));
+    let done = pr.life <= 0 || pr.pos.y < heightAt(pr.pos.x, pr.pos.z);
+    for (const m of monsters) {
+      if (done || m.dead) continue;
+      const cy = m.pos.y + m.def.size * 0.9;
+      if (Math.hypot(pr.pos.x - m.pos.x, pr.pos.y - cy, pr.pos.z - m.pos.z) < m.def.size + 0.5) {
+        hitMonster(m, pr.dmg, pr.crit); pr.hit = m; done = true;
+      }
+    }
+    if (done) { explode(pr); projectiles.splice(i, 1); }
+  }
+}
+function arrowRain(center, radius) {
+  for (let i = 0; i < 18; i++) {
+    const a = makeArrow();
+    const x = center.x + rand(-radius, radius) * 0.8, z = center.z + rand(-radius, radius) * 0.8, y0 = heightAt(x, z);
+    a.rotation.x = Math.PI / 2; // pointe vers le bas
+    scene.add(a);
+    const delay = rand(0, 0.15);
+    addFx(0.45, (k) => { const kk = clamp((k * 0.45 - delay) / 0.3, 0, 1); a.position.set(x, y0 + 14 * (1 - kk) + 0.3, z); }, () => scene.remove(a));
+  }
 }
 
 function updateInteract() {
@@ -1141,7 +1353,7 @@ function updateHud() {
   $('stF').style.width = p.st + '%';
   $('xpF').style.width = (p.xp / xpNext(p.level) * 100) + '%';
   $('gold').textContent = `${p.gold} 🪙`;
-  $('skCd').style.height = (p.skillCd / 8 * 100) + '%';
+  $('skCd').style.height = (p.skillCd / CLS().skill.cd * 100) + '%';
   const zn = zoneAt(p.pos.x, p.pos.z);
   if (zn !== lastZone) {
     lastZone = zn;
@@ -1180,30 +1392,79 @@ function tick() {
       if (!p.active) { p.t -= dt; if (p.t <= 0) { p.active = true; p.mesh.visible = true; } continue; }
       p.mesh.rotation.y += dt * 2; p.mesh.position.y = p.base + Math.sin(clock.elapsedTime * 3 + p.base) * 0.2;
     }
-    for (let i = waves.length - 1; i >= 0; i--) {
-      const w = waves[i]; w.t += dt;
-      w.m.scale.setScalar(1 + w.t * 22); w.m.material.opacity = 0.9 - w.t * 2.2;
-      if (w.t > 0.4) { scene.remove(w.m); w.m.material.dispose(); waves.splice(i, 1); }
-    }
+    updateFx(dt);
+    updateProjectiles(dt);
     for (const f of fires) f.scale.y = 1 + Math.sin(clock.elapsedTime * 12 + f.position.x) * 0.2;
     updateInteract();
     hudTimer -= dt;
     if (hudTimer <= 0) { hudTimer = 0.1; updateHud(); updateMarkers(); drawMap(); }
   }
-  updateCamera(dt);
+  if (preview) updatePreview(dt); else updateCamera(dt);
+  sky.position.copy(camera.position);
   updateDmgNums(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
 
+// ====================================================================
+// Écran de choix de classe (le héros tourne sur lui-même au village)
+// ====================================================================
+let selCls = 'guerrier';
+function updatePreview(dt) {
+  const g = hunter.g;
+  g.rotation.y += dt * 0.6;
+  hunter.legL.rotation.x = hunter.legR.rotation.x = 0;
+  hunter.arm.rotation.set(-0.15 + Math.sin(clock.elapsedTime * 2) * 0.05, 0, 0);
+  hunter.arm2.rotation.set(-0.1, 0, 0);
+  const P = player.pos, portrait = innerHeight > innerWidth;
+  g.position.copy(P);
+  camera.position.set(P.x, P.y + (portrait ? 2.6 : 1.9), P.z + (portrait ? 7.5 : 5.2));
+  camera.lookAt(P.x - (portrait ? 0 : 1.7), P.y + (portrait ? 0.2 : 1.15), P.z);
+  sun.position.set(P.x + 40, P.y + 80, P.z + 25); sun.target.position.copy(P);
+}
+function renderClassList() {
+  $('classList').innerHTML = Object.entries(CLASSES).map(([id, c]) => {
+    const bars = Object.entries(c.stats).map(([k, v]) => `<div class="st"><span>${k}</span><i style="width:${v * 20}%"></i></div>`).join('');
+    return `<div class="cc ${id === selCls ? 'sel' : ''}" data-id="${id}">
+      <div class="ci">${c.icon}</div>
+      <div class="cb"><b>${c.name}</b><small>${c.role}</small>
+        ${id === selCls ? `<p>${c.desc}</p><div class="sk">${c.skill.icon} <b>${c.skill.name}</b> — ${c.skill.desc}</div><div class="stats">${bars}</div>` : ''}
+      </div></div>`;
+  }).join('');
+  for (const el of document.querySelectorAll('.cc')) el.onclick = () => { selCls = el.dataset.id; setHeroModel(selCls); renderClassList(); };
+}
+function showClassSelect() {
+  started = false; preview = true; uiOpen = true;
+  selCls = player.cls || 'guerrier';
+  player.pos.set(0, heightAt(0, 8), 8);
+  setHeroModel(selCls);
+  $('hud').classList.add('hidden');
+  $('classSel').classList.remove('hidden');
+  renderClassList();
+}
+function startGame() {
+  preview = false; uiOpen = false; started = true;
+  $('classSel').classList.add('hidden');
+  $('hud').classList.remove('hidden');
+  player.rot = Math.PI; camYaw = Math.PI;
+  $('skIco').textContent = CLS().skill.icon;
+  updatePotions(); renderTracker();
+  if (!Object.keys(Q).length) setTimeout(() => toast("Parlez à l'Ancienne Maëlle (❗) au centre du village"), 600);
+}
+$('bStart').onclick = () => {
+  const changed = player.cls && player.cls !== selCls;
+  player.cls = selCls;
+  player.maxHp = maxHpFor(player.level); player.hp = player.maxHp;
+  player.skillCd = 0;
+  save();
+  startGame();
+  if (changed) toast(`Vous êtes maintenant ${CLS().name}`);
+};
 $('bPlay').onclick = () => {
   $('title').classList.add('hidden');
-  $('hud').classList.remove('hidden');
-  started = true;
-  updatePotions(); renderTracker();
   const el = document.documentElement;
   if (matchMedia('(pointer:coarse)').matches && el.requestFullscreen) el.requestFullscreen().catch(() => {});
-  if (!Object.keys(Q).length) setTimeout(() => toast("Parlez à l'Ancienne Maëlle (❗) au centre du village"), 600);
+  if (player.cls) startGame(); else showClassSelect();
 };
 
 // Accès debug pour les tests automatisés
